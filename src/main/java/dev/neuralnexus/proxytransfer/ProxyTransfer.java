@@ -15,9 +15,8 @@ import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.PluginContainer;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
-import com.velocitypowered.api.proxy.server.RegisteredServer;
 
-import net.kyori.adventure.key.Key;
+import dev.neuralnexus.proxytransfer.api.TransferAPI;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 
@@ -25,7 +24,8 @@ import org.slf4j.Logger;
 
 import java.net.InetSocketAddress;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+
+import static dev.neuralnexus.proxytransfer.api.TransferAPI.TRANSFER_KEY;
 
 @Plugin(id = "proxytransfer", name = "ProxyTransfer", version = BuildConstants.VERSION)
 public class ProxyTransfer implements SimpleCommand {
@@ -42,27 +42,23 @@ public class ProxyTransfer implements SimpleCommand {
         return server;
     }
 
-    private final PluginContainer plugin;
+    private static PluginContainer plugin;
+
+    public static PluginContainer plugin() {
+        return plugin;
+    }
 
     @Inject
     public ProxyTransfer(ProxyServer server, PluginContainer plugin, Logger logger) {
         ProxyTransfer.server = server;
-        this.plugin = plugin;
+        ProxyTransfer.plugin = plugin;
         ProxyTransfer.logger = logger;
     }
 
     @Subscribe
     public void onProxyInitialization(ProxyInitializeEvent event) {
-        logger.info("Starting ProxyTransfer");
-        CommandManager commandManager = server.getCommandManager();
-        CommandMeta commandMeta = commandManager.metaBuilder("transfer").plugin(plugin).build();
-        commandManager.register(commandMeta, new BrigadierCommand(TransferCommand.commandNode()));
+        new TransferCommand(server, plugin).register();
     }
-
-    public static final Key TRANSFER_KEY = Key.key("proxytransfer", "transfer");
-
-    ConcurrentHashMap<UUID, RegisteredServer> reconnecting = new ConcurrentHashMap<>();
-    ConcurrentHashMap<UUID, Boolean> transferring = new ConcurrentHashMap<>();
 
     // General Flow:
     // 1. Player logs in, server requests cookie
@@ -72,14 +68,12 @@ public class ProxyTransfer implements SimpleCommand {
     @Subscribe
     public void onLogin(LoginEvent event) {
         event.getPlayer().requestCookie(TRANSFER_KEY);
-        transferring.put(event.getPlayer().getUniqueId(), true);
     }
 
     @Subscribe
     public void onCookieReceived(CookieReceiveEvent event) {
         if (!event.getOriginalKey().equals(TRANSFER_KEY)) return;
         if (event.getOriginalData() == null || event.getOriginalData().length == 0) {
-            transferring.remove(event.getPlayer().getUniqueId());
             return;
         }
 
@@ -87,18 +81,18 @@ public class ProxyTransfer implements SimpleCommand {
         // Check if origin is valid?
         // Decrypt the data?
         server.getServer(data.server()).ifPresent(server ->
-                reconnecting.put(event.getPlayer().getUniqueId(), server));
+                TransferAPI.get().update(event.getPlayer().getUniqueId(), server));
     }
 
     @Subscribe
     public void onServerPreConnect(ServerPreConnectEvent event) {
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
-        if (reconnecting.containsKey(uuid)) {
+        if (TransferAPI.get().contains(uuid)) {
             event.setResult(ServerPreConnectEvent.ServerResult.denied());
-            player.createConnectionRequest(reconnecting.remove(uuid)).fireAndForget();
-            player.storeCookie(TRANSFER_KEY, new byte[0]);
+            player.createConnectionRequest(TransferAPI.get().remove(uuid)).fireAndForget();
         }
+        player.storeCookie(TRANSFER_KEY, new byte[0]);
     }
 
     @Override
