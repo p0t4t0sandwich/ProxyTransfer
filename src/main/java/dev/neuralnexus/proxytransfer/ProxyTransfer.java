@@ -3,6 +3,7 @@ package dev.neuralnexus.proxytransfer;
 import com.google.inject.Inject;
 import com.velocitypowered.api.command.CommandManager;
 import com.velocitypowered.api.command.CommandMeta;
+import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.event.connection.LoginEvent;
 import com.velocitypowered.api.event.player.CookieReceiveEvent;
@@ -107,39 +108,46 @@ public class ProxyTransfer implements SimpleCommand {
 
     @Override
     public void execute(final Invocation invocation) {
-        if (invocation.source() instanceof Player player) {
-            String[] args = invocation.arguments();
-            if (args.length != 2) {
-                player.sendMessage(Component.text("Usage: /transfer <host> <port>", NamedTextColor.RED));
-                return;
-            }
-            String host = args[0];
-            int port;
-            try {
-                port = Integer.parseInt(args[1]);
-            } catch (NumberFormatException e) {
-                player.sendMessage(Component.text("Invalid port.", NamedTextColor.RED));
-                return;
-            }
-            String playerServer = player.getCurrentServer().get().getServerInfo().getName();
-            int length = playerServer.length();
-
-            ByteBuffer buffer = ByteBuffer.allocate(4 + 4 + 4 + length);
-            InetSocketAddress origin = server.getBoundAddress();
-            buffer.put(origin.getAddress().getAddress());
-            buffer.putInt(origin.getPort());
-            if (player.getCurrentServer().isEmpty()) {
-                player.sendMessage(Component.text("You are not connected to a server.", NamedTextColor.RED));
-                return;
-            }
-            buffer.putInt(length);
-            buffer.put(playerServer.getBytes(StandardCharsets.UTF_8));
-
-            // Encrypt the data?
-            player.storeCookie(transferKey, buffer.array());
-
-            InetSocketAddress address = new InetSocketAddress(host, port);
-            player.transferToHost(address);
+        CommandSource source = invocation.source();
+        String[] args = invocation.arguments();
+        if (args.length != 3) {
+            source.sendMessage(Component.text("Usage: /transfer <player> <host> <port>", NamedTextColor.RED));
+            return;
         }
+        String targetName = args[0];
+        Player target = server.getPlayer(targetName).orElse(null);
+        if (target == null) {
+            source.sendMessage(Component.text("Player not found.", NamedTextColor.RED));
+            return;
+        }
+        if (target.getCurrentServer().isEmpty()) {
+            source.sendMessage(Component.text("Player is not connected to a server.", NamedTextColor.RED));
+            return;
+        }
+        String playerServer = target.getCurrentServer().get().getServerInfo().getName();
+        int length = playerServer.length();
+
+        String host = args[1];
+        int port;
+        try {
+            port = Integer.parseInt(args[2]);
+        } catch (NumberFormatException e) {
+            source.sendMessage(Component.text("Invalid port.", NamedTextColor.RED));
+            return;
+        }
+
+        ByteBuffer buffer = ByteBuffer.allocate(4 + 4 + 4 + length);
+        InetSocketAddress origin = server.getBoundAddress();
+        buffer.put(origin.getAddress().getAddress());
+        buffer.putInt(origin.getPort());
+
+        buffer.putInt(length);
+        buffer.put(playerServer.getBytes(StandardCharsets.UTF_8));
+
+        // Encrypt the data?
+        target.storeCookie(transferKey, buffer.array());
+
+        InetSocketAddress address = new InetSocketAddress(host, port);
+        target.transferToHost(address);
     }
 }
