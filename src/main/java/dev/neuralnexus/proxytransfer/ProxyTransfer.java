@@ -1,6 +1,7 @@
 package dev.neuralnexus.proxytransfer;
 
 import com.google.inject.Inject;
+import com.velocitypowered.api.command.BrigadierCommand;
 import com.velocitypowered.api.command.CommandManager;
 import com.velocitypowered.api.command.CommandMeta;
 import com.velocitypowered.api.command.CommandSource;
@@ -55,7 +56,7 @@ public class ProxyTransfer implements SimpleCommand {
         logger.info("Starting ProxyTransfer");
         CommandManager commandManager = server.getCommandManager();
         CommandMeta commandMeta = commandManager.metaBuilder("transfer").plugin(plugin).build();
-        commandManager.register(commandMeta, TransferCommand.register());
+        commandManager.register(commandMeta, new BrigadierCommand(TransferCommand.commandNode()));
     }
 
     public static final Key TRANSFER_KEY = Key.key("proxytransfer", "transfer");
