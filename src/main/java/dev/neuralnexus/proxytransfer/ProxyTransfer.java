@@ -22,10 +22,7 @@ import net.kyori.adventure.text.format.NamedTextColor;
 
 import org.slf4j.Logger;
 
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -75,23 +72,10 @@ public class ProxyTransfer implements SimpleCommand {
             return;
         }
 
-        ByteBuffer buffer = ByteBuffer.wrap(event.getOriginalData());
-        InetAddress origin;
-        try {
-            byte[] address = new byte[4];
-            buffer.get(address);
-            origin = InetAddress.getByAddress(address);
-        } catch (Exception e) {
-            logger.error("Failed to read origin address", e);
-            return;
-        }
-        int port = buffer.getInt();
+        TransferData data = TransferData.fromBytes(event.getOriginalData());
         // Check if origin is valid?
         // Decrypt the data?
-        int length = buffer.getInt();
-        String playerServer = new String(buffer.array(), buffer.position(), length, StandardCharsets.UTF_8);
-
-        this.server.getServer(playerServer).ifPresent(server ->
+        this.server.getServer(data.server()).ifPresent(server ->
                 reconnecting.put(event.getPlayer().getUniqueId(), server));
     }
 
@@ -124,8 +108,6 @@ public class ProxyTransfer implements SimpleCommand {
             source.sendMessage(Component.text("Player is not connected to a server.", NamedTextColor.RED));
             return;
         }
-        String playerServer = target.getCurrentServer().get().getServerInfo().getName();
-        int length = playerServer.length();
 
         String host = args[1];
         int port;
@@ -136,16 +118,17 @@ public class ProxyTransfer implements SimpleCommand {
             return;
         }
 
-        ByteBuffer buffer = ByteBuffer.allocate(4 + 4 + 4 + length);
         InetSocketAddress origin = server.getBoundAddress();
-        buffer.put(origin.getAddress().getAddress());
-        buffer.putInt(origin.getPort());
+        String playerServer = target.getCurrentServer().get().getServerInfo().getName();
 
-        buffer.putInt(length);
-        buffer.put(playerServer.getBytes(StandardCharsets.UTF_8));
+        TransferData data = new TransferData.Builder()
+                .origin(origin.getAddress().getHostAddress())
+                .port(origin.getPort())
+                .server(playerServer)
+                .build();
 
         // Encrypt the data?
-        target.storeCookie(transferKey, buffer.array());
+        target.storeCookie(transferKey, data.toBytes());
 
         InetSocketAddress address = new InetSocketAddress(host, port);
         target.transferToHost(address);
