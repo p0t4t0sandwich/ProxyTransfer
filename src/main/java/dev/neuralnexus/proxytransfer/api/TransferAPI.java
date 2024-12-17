@@ -25,10 +25,6 @@ public class TransferAPI {
         return reconnectMap.get(player);
     }
 
-    public void update(UUID player, RegisteredServer server) {
-        reconnectMap.replace(player, server);
-    }
-
     public RegisteredServer remove(UUID player) {
         return reconnectMap.remove(player);
     }
