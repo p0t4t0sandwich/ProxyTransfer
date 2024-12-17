@@ -48,11 +48,14 @@ public class TransferData {
         } catch (UnknownHostException e) {
             throw new IllegalStateException("Failed to get address", e);
         }
+
         byte[] portBytes = intToByteArray(port);
         System.arraycopy(portBytes, 0, buffer, 4, 4);
+
         byte[] lengthBytes = intToByteArray(serverBytes.length);
         System.arraycopy(lengthBytes, 0, buffer, 8, 4);
         System.arraycopy(serverBytes, 0, buffer, 12, serverBytes.length);
+
         return buffer;
     }
 
@@ -65,15 +68,19 @@ public class TransferData {
         } catch (UnknownHostException e) {
             throw new IllegalStateException("Failed to get address", e);
         }
+
         byte[] portBytes = new byte[4];
         System.arraycopy(buffer, 4, portBytes, 0, 4);
         int port = byteArrayToInt(portBytes);
+
         byte[] lengthBytes = new byte[4];
         System.arraycopy(buffer, 8, lengthBytes, 0, 4);
         int length = byteArrayToInt(lengthBytes);
+
         byte[] serverBytes = new byte[length];
         System.arraycopy(buffer, 12, serverBytes, 0, length);
         String server = new String(serverBytes, StandardCharsets.UTF_8);
+
         return new TransferData.Builder()
                 .origin(origin)
                 .port(port)

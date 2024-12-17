@@ -9,7 +9,6 @@ import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import com.velocitypowered.api.command.BrigadierCommand;
-import com.velocitypowered.api.command.CommandManager;
 import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.permission.Tristate;
 import com.velocitypowered.api.plugin.PluginContainer;
@@ -22,21 +21,21 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 
 import java.net.InetSocketAddress;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 public class TransferCommand {
     private final ProxyServer server;
-    private final PluginContainer plugin;
     private static final String PLAYER_ARG = "player";
     private static final String HOST_ARG = "host";
     private static final String PORT_ARG = "port";
 
-    public TransferCommand(ProxyServer server, PluginContainer plugin) {
+    public TransferCommand(ProxyServer server) {
         this.server = server;
-        this.plugin = plugin;
     }
 
-    public void register() {
+    public BrigadierCommand register() {
         final LiteralArgumentBuilder<CommandSource> rootNode = BrigadierCommand
                 .literalArgumentBuilder("transfer")
                 .requires(this::checkPermission);
@@ -53,14 +52,7 @@ public class TransferCommand {
         playerNode.then(hostNode.build());
         rootNode.then(playerNode.build());
 
-        final BrigadierCommand command = new BrigadierCommand(rootNode);
-        CommandManager commandManager = this.server.getCommandManager();
-        commandManager.register(
-                commandManager.metaBuilder(command)
-                        .plugin(this.plugin)
-                        .build(),
-                command
-        );
+        return new BrigadierCommand(rootNode);
     }
 
     private boolean checkPermission(CommandSource source) {
@@ -71,7 +63,7 @@ public class TransferCommand {
         final String argument = context.getArguments().containsKey(PLAYER_ARG)
                 ? context.getArgument(PLAYER_ARG, String.class)
                 : "";
-        for (final Player p : ProxyTransfer.server().getAllPlayers()) {
+        for (final Player p : this.server.getAllPlayers()) {
             final String playerName = p.getUsername();
             if (playerName.regionMatches(true, 0, argument, 0, argument.length())) {
                 builder.suggest(playerName);
@@ -83,22 +75,14 @@ public class TransferCommand {
         return builder.buildFuture();
     }
 
-    private int run(CommandContext<CommandSource> context) {
-        String playerArg = StringArgumentType.getString(context, "player");
-        Player target = ProxyTransfer.server().getPlayer(playerArg).orElse(null);
-        if (target == null) {
-            context.getSource().sendMessage(Component.text("Player not found", NamedTextColor.RED));
-            return 0;
-        }
-        if (target.getCurrentServer().isEmpty()) {
-            context.getSource().sendMessage(Component.text("Player is not connected to a server", NamedTextColor.RED));
-            return 0;
-        }
-        String hostArg = StringArgumentType.getString(context, "host");
-        int portArg = IntegerArgumentType.getInteger(context, "port");
-
+    private Component transfer(Player player, String host, int port) {
         InetSocketAddress origin = this.server.getBoundAddress();
-        String playerServer = target.getCurrentServer().get().getServerInfo().getName();
+        String playerServer;
+        if (player.getCurrentServer().isPresent()) {
+            playerServer = player.getCurrentServer().get().getServerInfo().getName();
+        } else {
+            playerServer = "none";
+        }
 
         TransferData data = new TransferData.Builder()
                 .origin(origin.getAddress().getHostAddress())
@@ -107,10 +91,34 @@ public class TransferCommand {
                 .build();
 
         // Encrypt the data?
-        target.storeCookie(TransferAPI.TRANSFER_KEY, data.toBytes());
-        target.transferToHost(new InetSocketAddress(hostArg, portArg));
+        player.storeCookie(TransferAPI.TRANSFER_KEY, data.toBytes());
+        player.transferToHost(new InetSocketAddress(host, port));
 
-        context.getSource().sendMessage(Component.text("Transferring " + playerArg + " to " + hostArg + ":" + portArg, NamedTextColor.GREEN));
+        return Component.text("Transferred " + player.getUsername() +
+                        " to " + host + ":" + port + "/" + playerServer, NamedTextColor.GREEN);
+    }
+
+    private int run(CommandContext<CommandSource> context) {
+        CommandSource source = context.getSource();
+        List<Player> players = new ArrayList<>();
+        String playerStr = StringArgumentType.getString(context, PLAYER_ARG);
+        if (playerStr.equalsIgnoreCase("all")) {
+            players.addAll(server.getAllPlayers());
+        } else {
+            Player player = server.getPlayer(playerStr).orElse(null);
+            if (player == null) {
+                source.sendMessage(Component.text("Player not found", NamedTextColor.RED));
+                return 0;
+            }
+            players.add(player);
+        }
+        String host = StringArgumentType.getString(context, HOST_ARG);
+        int port = IntegerArgumentType.getInteger(context, PORT_ARG);
+
+        source.sendMessage(Component.text("Transferring players...", NamedTextColor.GREEN));
+        for (Player player : players) {
+            source.sendMessage(this.transfer(player, host, port));
+        }
         return Command.SINGLE_SUCCESS;
     }
 }
