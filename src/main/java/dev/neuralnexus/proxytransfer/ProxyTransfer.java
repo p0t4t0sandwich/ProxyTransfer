@@ -35,7 +35,7 @@ public class ProxyTransfer {
         logger.info("ProxyTransfer has been initialized!");
 
         EventManager eventManager = this.server.getEventManager();
-        eventManager.register(plugin, new TransferListener(this.server));
+        eventManager.register(this.plugin, new TransferListener(this.server));
 
         CommandManager commandManager = this.server.getCommandManager();
         BrigadierCommand command = new TransferCommand(this.server).register();

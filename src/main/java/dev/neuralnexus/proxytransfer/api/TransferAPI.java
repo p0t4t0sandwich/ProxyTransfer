@@ -13,7 +13,7 @@ public class TransferAPI {
         return INSTANCE;
     }
 
-    public static final Key TRANSFER_KEY = Key.key("proxytransfer", "transfer");
+    public static final Key TRANSFER_KEY = Key.key("proxytransfer", "data");
 
     private final ConcurrentHashMap<UUID, RegisteredServer> reconnectMap = new ConcurrentHashMap<>();
 
